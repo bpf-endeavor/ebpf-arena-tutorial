@@ -59,7 +59,7 @@ typedef enum {
 } init_status_t;
 
 
-init_status_t htab_init_status;
+int htab_init_status;
 void __arena *htab_for_user;
 
 #define __inline static inline __attribute__((always_inline))
@@ -82,38 +82,8 @@ typedef struct {
     struct htab __arena *l2map;
 } l1_entry_t;
 
-__inline int parse_eth(struct xdp_md *ctx, state_t *s)
-{
-    struct ethhdr *eth = data(ctx);
-    if ((void *)(eth + 1) > dataend(ctx)) {
-        return XDP_PASS;
-    }
-    s->l3_proto = bpf_ntohs(eth->h_proto);
-    s->offset = sizeof(struct ethhdr);
-    return CONTINUE;
-}
-
-__inline int parse_ipv4(struct xdp_md *ctx, state_t *s)
-{
-    struct iphdr *ip = data(ctx) + s->offset;
-    if ((void *)(ip + 1) > dataend(ctx)) {
-        return XDP_PASS;
-    }
-    s->l4_proto = ip->protocol;
-    s->saddr = bpf_ntohl(ip->saddr);
-    s->offset += ip->ihl * 4;
-    return CONTINUE;
-}
-
 __inline int parse_l4(struct xdp_md *ctx, state_t *s)
 {
-    /* The port numbers are in the same position in both TCP and UDP */
-    struct udphdr *l4 = data(ctx) + s->offset;
-    if ((void *)(l4 + 1) > dataend(ctx)) {
-        return XDP_PASS;
-    }
-    s->sport = bpf_ntohs(l4->source);
-    s->dport = bpf_ntohs(l4->dest);
     return CONTINUE;
 }
 
@@ -125,6 +95,7 @@ __inline int do_book_keeping(state_t *s)
 
     /* Check if hash map was created before */
     if (htab_init_status == NO) {
+        /* TODO: maybe move the initialization to the userspace part */
         htab_init_status = YES;
         htab = bpf_alloc(sizeof(*htab));
         cast_kern(htab);
@@ -150,30 +121,53 @@ __inline int do_book_keeping(state_t *s)
 	return 0;
 }
 
+/* This program can only be executed using BPF_PROG_RUN system call
+ * more info: https://docs.ebpf.io/linux/program-type/BPF_PROG_TYPE_SYSCALL/
+ * */
+SEC("syscall")
 int prog(struct xdp_md *ctx)
 {
     state_t s;
-    int ret;
-    ret = parse_eth(ctx, &s);
-    if (ret != CONTINUE)
-        goto store;
-    ret = parse_ipv4(ctx, &s);
-    if (ret != CONTINUE)
-        goto store;
+    int ret = 0;
+    struct ethhdr *eth = NULL;
+    struct iphdr *ip = NULL;
+    struct udphdr *l4 = NULL;
+    void *data_end = NULL;
+    __builtin_memset(&s, 0, sizeof(state_t));
+
+    eth = data(ctx);
+    data_end = dataend(ctx);
+    if ((void *)(eth + 1) > data_end) {
+        return XDP_PASS;
+    }
+    s.l3_proto = bpf_ntohs(eth->h_proto);
+
+    ip = (void *)(eth + 1);
+    if ((void *)(ip + 1) > data_end) {
+        return XDP_PASS;
+    }
+    s.l4_proto = ip->protocol;
+    s.saddr = bpf_ntohl(ip->saddr);
+    s.offset += ip->ihl * 4;
+
     switch (s.l4_proto) {
         case IPPROTO_TCP: /* fallthrough */
         case IPPROTO_UDP:
-            ret = parse_l4(ctx, &s);
-            ret = XDP_PASS;
+            /* The port numbers are in the same position in both TCP and UDP */
+            l4 = (void *)(ip + (ip->ihl * 4));
+            if ((void *)(l4 + 1) > data_end) {
+                return XDP_PASS;
+            }
+            s.sport = bpf_ntohs(l4->source);
+            s.dport = bpf_ntohs(l4->dest);
             break;
         default:
-            ret = XDP_PASS;
             goto store;
     }
 
 store:
 	do_book_keeping(&s);
-    return ret;
+    return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";

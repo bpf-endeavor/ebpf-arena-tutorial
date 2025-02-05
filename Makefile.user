@@ -1,0 +1,13 @@
+build_dir ?= build
+source = mogu_loader.c
+object = $(addprefix $(build_dir)/, $(patsubst %.c, %.o, $(source)))
+$(info $(object))
+
+CFLAGS = -O3 -g -Wall $(shell pkg-config --cflags libbpf)
+CFLAGS += -I ./build/skel/
+LDFLAGS = $(shell pkg-config --libs libbpf)
+
+default: $(object)
+
+$(build_dir)/%.o: %.c build/skel/pubtrafstat.skel.h
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
