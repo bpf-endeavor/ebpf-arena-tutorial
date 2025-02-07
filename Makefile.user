@@ -9,5 +9,5 @@ LDFLAGS = $(shell pkg-config --libs libbpf)
 
 default: $(object)
 
-$(build_dir)/%.o: %.c build/skel/mogu.skel.h
+$(build_dir)/%.o: %.c build/skel/mogu.skel.h build/skel/aloe.skel.h
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)

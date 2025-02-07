@@ -6,7 +6,15 @@
     - At the moment of writing this: only `fentry`/`fexit`/`fmod_ret`, `lsm`,
       `iter`, `uprobe`, and `struct_ops` programs can be sleepable (according
       to the libbpf error message). Look [here for more info](https://github.com/libbpf/libbpf/blob/master/docs/program_types.rst).
-
+* I managed to share an arena map between two programs
+    - In order for it to work, I shared the Arena using libbpf API, and passed
+      the memory address of the page from one program to the other (loader
+      program did it)
+    - Both the programs had to call the `bpf_arena_alloc_pages` although I only
+      need one of the to work. If I avoid the extra call in the second program
+      the verifier would complain with using memory loads with cast
+      instructions but having no Arena map. It seems the program is mark as
+      having the map only when it is using it with a helper/kfunc function.
 
 ## Questions
 
@@ -25,3 +33,8 @@
 2. Can I apply the CacheDirectory type of optimizations to arena?
 3. How can I do prefetching with this implmentation?
 4. Is it possible to allocate from HUGE page pool for the htab?
+
+## Side Note
+
+`Mogu` and `Aloe` (names used for eBPF programs) are the name of two types of
+sugary drink with some chewy bits from department's vending machiens.

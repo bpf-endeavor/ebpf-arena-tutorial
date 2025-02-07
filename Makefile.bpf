@@ -4,7 +4,7 @@ CLANG ?= clang-19
 build_dir ?= build
 skel_dir = $(build_dir)/skel
 # bpf_src = pubtrafstat.bpf.c
-bpf_src = mogu.bpf.c
+bpf_src = mogu.bpf.c aloe.bpf.c
 # define headers as dependencies so the program is recompiled after changes
 bpf_headers=$(shell find ./include/ -name '*.h')
 out_obj = $(addprefix $(skel_dir)/, $(patsubst %.bpf.c, %.skel.h, $(bpf_src)))
@@ -42,9 +42,7 @@ $(build_dir)/%.ll: %.c
 $(build_dir)/%.o: $(build_dir)/%.ll  $(bpf_headers)
 	$(LLC) -mcpu=probe -march=bpf -filetype=obj -o $@ $<
 
-# Name ``mogu'' is selected from the drink with chewy cubes in it that I
-# had a few minutes ago
-bpf_skeleton_name=mogu
 $(skel_dir)/%.skel.h: $(build_dir)/%.bpf.o
-	bpftool gen skeleton $< name $(bpf_skeleton_name) > $@
+	name=$$(echo $@ | cut -d / -f 3 | cut -d '.' -f 1); \
+		bpftool gen skeleton $< name $$name > $@
 
