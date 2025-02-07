@@ -98,6 +98,7 @@ int main(int argc, char *argv[])
 
     if (mogu__attach(skel)) {
         fprintf(stderr, "Failed to attach the program\n");
+        mogu__destroy(skel);
         return EXIT_FAILURE;
     }
 
@@ -111,18 +112,23 @@ int main(int argc, char *argv[])
     {
         /* Set the same Arena map for Aloe */
         int arena_fd = bpf_map__fd(skel->maps.arena);
-        bpf_map__reuse_fd(askel->maps.arena, arena_fd);
+        bpf_map__reuse_fd(askel->maps.arena_map, arena_fd);
         /* Pass the pointer to the Aloe */
         askel->bss->mem = skel->bss->mem;
     }
 
     if (aloe__load(askel)) {
         fprintf(stderr, "Failed to load eBPF program\n");
+        mogu__detach(skel);
+        mogu__destroy(skel);
         return EXIT_FAILURE;
     }
 
     if (aloe__attach(askel)) {
         fprintf(stderr, "Failed to attach the program\n");
+        mogu__detach(skel);
+        mogu__destroy(skel);
+        aloe__destroy(askel);
         return EXIT_FAILURE;
     }
 

@@ -42,7 +42,7 @@ static __always_inline int __initialize(void)
 SEC("syscall")
 int mogu_main(void *_)
 {
-    bpf_printk("hello world\n");
+    bpf_printk("mogu: hello\n");
     if (!flag_initialized) {
         if (__initialize() != 0) {
             return 1;

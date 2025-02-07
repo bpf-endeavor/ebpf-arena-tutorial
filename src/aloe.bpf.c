@@ -11,6 +11,10 @@
 
 #include "shared_struct.h"
 
+/* This function is defined in the kernel module provided with this repo */
+long my_kfunc_reg_arena(void *p__map) __ksym;
+
+
 /* NOTE: the user-space loader should change the file descriptor of this map to
  * what is set for Mogu. This will mean both will access to the same map.
  * */
@@ -18,7 +22,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_ARENA);
     __uint(map_flags, BPF_F_MMAPABLE);
     __uint(max_entries, 2); /* number of pages */
-} arena SEC(".maps");
+} arena_map SEC(".maps");
 
 /* The user-space program will provide the memory address
  * */
@@ -32,10 +36,11 @@ int aloe_main(void *_)
     /* int ret = 123; */
     /* ret = bpf_map_push_elem(&arena, &zero, 0); */
     /* bpf_printk("aloe: ret: %d\n"); */
-    /* void __arena *_tmp = bpf_arena_alloc_pages(&arena, NULL, 1, NUMA_NO_NODE, 0); */
+    /*void __arena *_tmp = bpf_arena_alloc_pages(&arena, NULL, 1, NUMA_NO_NODE, 0);*/
+    my_kfunc_reg_arena(&arena_map);
     /* ------------------------------------------------------------ */
 
-    bpf_printk("aloe: \n");
+    bpf_printk("aloe: hello\n");
     if (mem == NULL) {
         /* this branch must never happen! */
         bpf_printk("aloe: not seeing the memory!\n");
@@ -43,6 +48,7 @@ int aloe_main(void *_)
     }
     __arena entry_t *e = mem;
     bpf_printk("aloe: counter=%lld\n", e->counter);
+    e->counter += 100;
     return 0;
 }
 
