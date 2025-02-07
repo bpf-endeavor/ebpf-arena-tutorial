@@ -1,5 +1,6 @@
 #pragma once
 #include <linux/bpf.h>
+#include "compiler.h"
 
 static inline int my_memcmp(__u8 *a, __u8 *b, __u16 sz)
 {
@@ -17,7 +18,8 @@ static inline int my_memcmp(__u8 *a, __u8 *b, __u16 sz)
     return 0;
 }
 
-static inline void *my_memcpy(__u8 *dst, __u8 *src, __u16 sz)
+
+static inline __nobuiltin("memcpy") void *my_memcpy(__u8 *dst, __u8 *src, __u16 sz)
 {
     for (__u16 i = 0; i < sz && i < 128; i++)
         dst[i] = src[i];

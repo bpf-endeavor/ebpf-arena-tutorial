@@ -3,7 +3,8 @@ CLANG ?= clang-19
 
 build_dir ?= build
 skel_dir = $(build_dir)/skel
-bpf_src = pubtrafstat.bpf.c
+# bpf_src = pubtrafstat.bpf.c
+bpf_src = mogu.bpf.c
 # define headers as dependencies so the program is recompiled after changes
 bpf_headers=$(shell find ./include/ -name '*.h')
 out_obj = $(addprefix $(skel_dir)/, $(patsubst %.bpf.c, %.skel.h, $(bpf_src)))

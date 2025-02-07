@@ -59,20 +59,20 @@ typedef struct hashtab_elem __arena hashtab_elem_t;
 static hashtab_elem_t *lookup_elem_raw(arena_list_head_t *head, __u32 hash,
         void *key, keysz_t key_sz)
 {
-	hashtab_elem_t *l;
+    hashtab_elem_t *l;
 
-	list_for_each_entry(l, head, hash_node)
-		if (l->hash == hash) {
+    list_for_each_entry(l, head, hash_node)
+        if (l->hash == hash) {
             void *l_key = EXTRACT_KEY(htab, l);
             if (my_memcmp(l_key, key, key_sz) == 0) {
                 return l;
             }
         }
 
-	return NULL;
+    return NULL;
 }
 
-static int htab_hash(void *key, keysz_t sz)
+static inline int htab_hash(void *key, keysz_t sz)
 {
     switch (sz) {
         case 4:
@@ -83,61 +83,61 @@ static int htab_hash(void *key, keysz_t sz)
         default:
             break;
     }
-	return jhash(key, sz, JHASH_INITVAL);
+    return jhash(key, sz, JHASH_INITVAL);
 }
 
-__weak void *htab_lookup_elem(htab_t *htab __arg_arena, void *key)
+static inline void *htab_lookup_elem(htab_t *htab __arg_arena, void *key)
 {
-	hashtab_elem_t *l_old;
-	arena_list_head_t *head;
+    hashtab_elem_t *l_old;
+    arena_list_head_t *head;
 
-	cast_kern(htab);
+    cast_kern(htab);
     int hash = htab_hash(key, htab->key_sz);
-	head = select_bucket(htab, hash);
-	l_old = lookup_elem_raw(head, hash, key, htab->key_sz);
-	if (l_old) {
+    head = select_bucket(htab, hash);
+    l_old = lookup_elem_raw(head, hash, key, htab->key_sz);
+    if (l_old) {
         void *l_val = (void *)(l_old + 1) + htab->key_sz;
-		return l_val;
+        return l_val;
     }
-	return NULL;
+    return NULL;
 }
 
-__weak int htab_update_elem(htab_t *htab __arg_arena, void *key, void *value)
+static inline int htab_update_elem(htab_t *htab __arg_arena, void *key, void *value)
 {
-	hashtab_elem_t *l_new = NULL, *l_old;
-	arena_list_head_t *head;
+    hashtab_elem_t *l_new = NULL, *l_old;
+    arena_list_head_t *head;
 
-	cast_kern(htab);
+    cast_kern(htab);
     int hash = htab_hash(key, htab->key_sz);
-	head = select_bucket(htab, hash);
-	l_old = lookup_elem_raw(head, hash, key, htab->key_sz);
+    head = select_bucket(htab, hash);
+    l_old = lookup_elem_raw(head, hash, key, htab->key_sz);
 
-	l_new = bpf_alloc(sizeof(hashtab_elem_t) + htab->key_sz + htab->val_sz);
-	if (!l_new)
-		return -ENOMEM;
-	l_new->hash = hash;
+    l_new = bpf_alloc(sizeof(hashtab_elem_t) + htab->key_sz + htab->val_sz);
+    if (!l_new)
+        return -ENOMEM;
+    l_new->hash = hash;
     void *l_key = EXTRACT_KEY(htab, l_new);
     my_memcpy(l_key, key, htab->key_sz);
     void *l_val = l_key + htab->key_sz;
     my_memcpy(l_val, value, htab->val_sz);
 
-	list_add_head(&l_new->hash_node, head);
-	if (l_old) {
-		list_del(&l_old->hash_node);
-		bpf_free(l_old);
-	}
-	return 0;
+    list_add_head(&l_new->hash_node, head);
+    if (l_old) {
+        list_del(&l_old->hash_node);
+        bpf_free(l_old);
+    }
+    return 0;
 }
 
-void htab_init(htab_t *htab, keysz_t key_sz, valsz_t val_sz)
+static inline void htab_init(htab_t *htab, keysz_t key_sz, valsz_t val_sz)
 {
     const int count_pages = 2;
-	void __arena *buckets = bpf_arena_alloc_pages(&arena,
+    void __arena *buckets = bpf_arena_alloc_pages(&arena,
             NULL, count_pages, NUMA_NO_NODE, 0);
 
-	cast_user(buckets);
-	htab->buckets = buckets;
-	htab->n_buckets = count_pages * PAGE_SIZE / sizeof(struct htab_bucket);
+    cast_user(buckets);
+    htab->buckets = buckets;
+    htab->n_buckets = count_pages * PAGE_SIZE / sizeof(struct htab_bucket);
     htab->key_sz = key_sz;
     htab->val_sz = val_sz;
 }

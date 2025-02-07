@@ -50,7 +50,7 @@ struct {
 
 /* The bpf_arena_list relies on this value, I am not sure what the purpose is
  * */
-#define can_loop true
+#define can_loop false
 #include "bpf_arena_htab.h"
 
 typedef enum {
@@ -128,44 +128,50 @@ SEC("syscall")
 int prog(struct xdp_md *ctx)
 {
     state_t s;
-    int ret = 0;
-    struct ethhdr *eth = NULL;
-    struct iphdr *ip = NULL;
-    struct udphdr *l4 = NULL;
-    void *data_end = NULL;
+    /* int ret = 0; */
+    /* struct ethhdr *eth = NULL; */
+    /* struct iphdr *ip = NULL; */
+    /* struct udphdr *l4 = NULL; */
+    /* void *data_end = NULL; */
     __builtin_memset(&s, 0, sizeof(state_t));
+    s.l3_proto = ETH_P_IP;
+    s.l4_proto = IPPROTO_UDP;
+    s.saddr = 0x123456ab;
+    /* s.daddr = 0x98765432; */
+    s.sport = 123;
+    s.dport = 546;
 
-    eth = data(ctx);
-    data_end = dataend(ctx);
-    if ((void *)(eth + 1) > data_end) {
-        return XDP_PASS;
-    }
-    s.l3_proto = bpf_ntohs(eth->h_proto);
+    /* eth = data(ctx); */
+    /* data_end = dataend(ctx); */
+    /* if ((void *)(eth + 1) > data_end) { */
+    /*     return XDP_PASS; */
+    /* } */
+    /* s.l3_proto = bpf_ntohs(eth->h_proto); */
 
-    ip = (void *)(eth + 1);
-    if ((void *)(ip + 1) > data_end) {
-        return XDP_PASS;
-    }
-    s.l4_proto = ip->protocol;
-    s.saddr = bpf_ntohl(ip->saddr);
-    s.offset += ip->ihl * 4;
+    /* ip = (void *)(eth + 1); */
+    /* if ((void *)(ip + 1) > data_end) { */
+    /*     return XDP_PASS; */
+    /* } */
+    /* s.l4_proto = ip->protocol; */
+    /* s.saddr = bpf_ntohl(ip->saddr); */
+    /* s.offset += ip->ihl * 4; */
 
-    switch (s.l4_proto) {
-        case IPPROTO_TCP: /* fallthrough */
-        case IPPROTO_UDP:
-            /* The port numbers are in the same position in both TCP and UDP */
-            l4 = (void *)(ip + (ip->ihl * 4));
-            if ((void *)(l4 + 1) > data_end) {
-                return XDP_PASS;
-            }
-            s.sport = bpf_ntohs(l4->source);
-            s.dport = bpf_ntohs(l4->dest);
-            break;
-        default:
-            goto store;
-    }
+    /* switch (s.l4_proto) { */
+    /*     case IPPROTO_TCP: /1* fallthrough *1/ */
+    /*     case IPPROTO_UDP: */
+    /*         /1* The port numbers are in the same position in both TCP and UDP *1/ */
+    /*         l4 = (void *)(ip + (ip->ihl * 4)); */
+    /*         if ((void *)(l4 + 1) > data_end) { */
+    /*             return XDP_PASS; */
+    /*         } */
+    /*         s.sport = bpf_ntohs(l4->source); */
+    /*         s.dport = bpf_ntohs(l4->dest); */
+    /*         break; */
+    /*     default: */
+    /*         goto store; */
+    /* } */
 
-store:
+/* store: */
 	do_book_keeping(&s);
     return XDP_PASS;
 }
