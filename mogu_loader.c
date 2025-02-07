@@ -9,22 +9,13 @@
 
 #include <bpf/bpf.h>
 
+#include "include/shared_struct.h"
 #include "mogu.skel.h"
 
+/* Some global vars */
 static volatile int running = 0;
 static int ebpf_prog_fd = -1;
-
-static int run_ebpf_prog(int fd);
-
-static void handle_signal(int s) {
-    running = 0;
-}
-
-static void handle_invoke_signal(int s) {
-    if (ebpf_prog_fd == -1)
-        return;
-    run_ebpf_prog(ebpf_prog_fd);
-}
+static struct mogu *skel = NULL;
 
 static int run_ebpf_prog(int prog_fd)
 {
@@ -52,10 +43,29 @@ static int run_ebpf_prog(int prog_fd)
     return test_opts.retval;
 }
 
+static void read_the_shared_mem(void)
+{
+    entry_t *e = skel->bss->mem;
+    if (e == NULL) {
+        printf("NOTE: the initialization was not successful!\n");
+        return;
+    }
+    printf("eBPF reports: counter=%lld\n", e->counter);
+}
+
+static void handle_signal(int s) {
+    running = 0;
+}
+
+static void handle_invoke_signal(int s) {
+    if (ebpf_prog_fd == -1)
+        return;
+    run_ebpf_prog(ebpf_prog_fd);
+    read_the_shared_mem();
+}
+
 int main(int argc, char *argv[])
 {
-    struct mogu *skel;
-
     skel = mogu__open();
     if (!skel) {
         fprintf(stderr, "Failed to open the skeleton\n");
@@ -86,7 +96,7 @@ int main(int argc, char *argv[])
     printf("Hit Ctrl+C to terminate ...\n");
     printf("Invoke eBPF program:\n\tpkill -SIGUSR1 %s\n", argv[0]);
 
-    /* for testing */
+    /* for testing: invoke the program right after loading it */
     handle_invoke_signal(0);
 
     while (running) { pause(); }

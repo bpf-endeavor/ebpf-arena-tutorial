@@ -14,9 +14,13 @@ struct {
 	__uint(max_entries, 2); /* number of pages */
 } arena SEC(".maps");
 
+/* keep a flag fo whether we have allocated & initilized the memory page */
 static bool flag_initialized = false;
-static __arena void *mem = NULL;
 
+/* this global variable holds the pointer to page we allocated from arena and
+ * is also shared with the userspace
+ * */
+__arena void *mem = NULL;
 
 static __always_inline int __initialize(void)
 {
@@ -50,7 +54,7 @@ int mogu_main(void *_)
     }
     __arena entry_t *e = mem;
     e->counter += 1;
-    bpf_printk("counter: %ld\n", e->counter);
+    bpf_printk("counter: %lld\n", e->counter);
     return 0;
 }
 
