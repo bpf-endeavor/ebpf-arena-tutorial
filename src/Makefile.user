@@ -1,13 +1,19 @@
 build_dir ?= build
 source = mogu_loader.c
 object = $(addprefix $(build_dir)/, $(patsubst %.c, %.o, $(source)))
+skeleton_dir = ./build/skel/
 # $(info $(object))
 
 CFLAGS = -O3 -g -Wall $(shell pkg-config --cflags libbpf)
-CFLAGS += -I ./build/skel/
+CFLAGS += -I $(skeleton_dir)
 LDFLAGS = $(shell pkg-config --libs libbpf)
+
+# Skeleton header files that loader relies on
+bpf_names = mogu aloe macchiato
+skeletons = $(addprefix $(skeleton_dir), $(addsuffix .skel.h, $(bpf_names)))
+$(info $(skeletons))
 
 default: $(object)
 
-$(build_dir)/%.o: %.c build/skel/mogu.skel.h build/skel/aloe.skel.h
+$(build_dir)/%.o: %.c $(skeletons)
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)

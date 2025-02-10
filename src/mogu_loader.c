@@ -6,18 +6,21 @@
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
+#include <net/if.h>
 
 #include <bpf/bpf.h>
 
 #include "include/shared_struct.h"
 #include "mogu.skel.h"
 #include "aloe.skel.h"
+#include "macchiato.skel.h"
 
 /* Some global vars */
 static volatile int running = 0;
 static int ebpf_prog_fd = -1;
 static struct mogu *skel = NULL;
 static struct aloe *askel = NULL;
+static struct macchiato *xskel = NULL;
 
 static int run_ebpf_prog(int prog_fd)
 {
@@ -75,6 +78,16 @@ static void handle_invoke_signal2(int s) {
 
 int main(int argc, char *argv[])
 {
+    char *ifacename = "veth1";
+    const int ifindex = if_nametoindex(ifacename);
+    const int xdp_flags = 0;
+
+    if (!ifindex) {
+        fprintf(stderr, "Failed to find the interface (%s) for XDP program!\n",
+                ifacename);
+        return EXIT_FAILURE;
+    }
+
     skel = mogu__open();
     if (!skel) {
         fprintf(stderr, "Failed to open the skeleton\n");
@@ -85,11 +98,18 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Failed to open aloe skeleton\n");
         return EXIT_FAILURE;
     }
+    xskel = macchiato__open();
+    if (!xskel) {
+        fprintf(stderr, "Failed to open macchiato skeleton\n");
+        return EXIT_FAILURE;
+    }
 
     /* Set the sleepable flag for the program using the arena alloc page helper
      * */
     bpf_program__set_flags(skel->progs.mogu_main, BPF_F_SLEEPABLE);
     bpf_program__set_flags(askel->progs.aloe_main, BPF_F_SLEEPABLE);
+    /* NOTE: XDP does not support the sleepable flag. Most importantly, we do
+     * not want to sleep in XDP anyway because we are after performance */
 
     if (mogu__load(skel)) {
         fprintf(stderr, "Failed to load eBPF program\n");
@@ -108,17 +128,20 @@ int main(int argc, char *argv[])
     ebpf_prog_fd = bpf_program__fd(skel->progs.mogu_main);
     handle_invoke_signal(0);
 
-    /* Configure Aloe */
+    /* Configure Aloe & Macchiato */
     {
         /* Set the same Arena map for Aloe */
         int arena_fd = bpf_map__fd(skel->maps.arena);
         bpf_map__reuse_fd(askel->maps.arena_map, arena_fd);
         /* Pass the pointer to the Aloe */
         askel->bss->mem = skel->bss->mem;
+
+        bpf_map__reuse_fd(xskel->maps.arena_map, arena_fd);
+        xskel->bss->mem = skel->bss->mem;
     }
 
     if (aloe__load(askel)) {
-        fprintf(stderr, "Failed to load eBPF program\n");
+        fprintf(stderr, "Failed to load Aloe program\n");
         mogu__detach(skel);
         mogu__destroy(skel);
         return EXIT_FAILURE;
@@ -132,6 +155,29 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    if (macchiato__load(xskel)) {
+        fprintf(stderr, "Failed to load Macchiato program\n");
+        mogu__detach(skel);
+        mogu__destroy(skel);
+        aloe__detach(askel);
+        aloe__destroy(askel);
+        return EXIT_FAILURE;
+    }
+
+    {
+        /* Attach XDP */
+        int prog_fd = bpf_program__fd(xskel->progs.macchiato_main);
+        if (bpf_xdp_attach(ifindex, prog_fd, xdp_flags, NULL) != 0) {
+            mogu__detach(skel);
+            mogu__destroy(skel);
+            aloe__detach(askel);
+            aloe__destroy(askel);
+            bpf_xdp_detach(ifindex, xdp_flags, NULL);
+            macchiato__destroy(xskel);
+            return EXIT_FAILURE;
+        }
+    }
+
     /* Keep running and handle signals */
     running = 1;
     signal(SIGINT, handle_signal);
@@ -142,6 +188,7 @@ int main(int argc, char *argv[])
     printf("Invoke eBPF program:\n");
     printf("\tMogu: pkill -SIGUSR1 mogu_loader\n");
     printf("\tAloe: pkill -SIGUSR2 mogu_loader\n");
+    printf("\tMacchiato: send a UDP packet (dest port=8080) to the interface %s\n", ifacename);
 
     while (running) { pause(); }
 
@@ -149,6 +196,8 @@ int main(int argc, char *argv[])
     mogu__destroy(skel);
     aloe__detach(askel);
     aloe__destroy(askel);
+    bpf_xdp_detach(ifindex, xdp_flags, NULL);
+    macchiato__destroy(xskel);
     printf("Done!\n");
     return 0;
 }
