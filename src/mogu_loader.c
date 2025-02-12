@@ -13,14 +13,17 @@
 #include "include/shared_struct.h"
 #include "mogu.skel.h"
 #include "aloe.skel.h"
-#include "macchiato.skel.h"
 
 /* Some global vars */
 static volatile int running = 0;
 static int ebpf_prog_fd = -1;
 static struct mogu *skel = NULL;
 static struct aloe *askel = NULL;
+
+#ifdef HAS_XDP
+#include "macchiato.skel.h"
 static struct macchiato *xskel = NULL;
+#endif
 
 static int run_ebpf_prog(int prog_fd)
 {
@@ -78,6 +81,7 @@ static void handle_invoke_signal2(int s) {
 
 int main(int argc, char *argv[])
 {
+#ifdef HAS_XDP
     char *ifacename = "veth1";
     const int ifindex = if_nametoindex(ifacename);
     const int xdp_flags = 0;
@@ -87,6 +91,7 @@ int main(int argc, char *argv[])
                 ifacename);
         return EXIT_FAILURE;
     }
+#endif
 
     skel = mogu__open();
     if (!skel) {
@@ -98,11 +103,14 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Failed to open aloe skeleton\n");
         return EXIT_FAILURE;
     }
+
+#ifdef HAS_XDP
     xskel = macchiato__open();
     if (!xskel) {
         fprintf(stderr, "Failed to open macchiato skeleton\n");
         return EXIT_FAILURE;
     }
+#endif
 
     /* Set the sleepable flag for the program using the arena alloc page helper
      * */
@@ -136,8 +144,10 @@ int main(int argc, char *argv[])
         /* Pass the pointer to the Aloe */
         askel->bss->mem = skel->bss->mem;
 
+#ifdef HAS_XDP
         bpf_map__reuse_fd(xskel->maps.arena_map, arena_fd);
         xskel->bss->mem = skel->bss->mem;
+#endif
     }
 
     if (aloe__load(askel)) {
@@ -155,6 +165,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+#ifdef HAS_XDP
     if (macchiato__load(xskel)) {
         fprintf(stderr, "Failed to load Macchiato program\n");
         mogu__detach(skel);
@@ -177,6 +188,7 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
     }
+#endif
 
     /* Keep running and handle signals */
     running = 1;
@@ -188,7 +200,9 @@ int main(int argc, char *argv[])
     printf("Invoke eBPF program:\n");
     printf("\tMogu: pkill -SIGUSR1 mogu_loader\n");
     printf("\tAloe: pkill -SIGUSR2 mogu_loader\n");
+#ifdef HAS_XDP
     printf("\tMacchiato: send a UDP packet (dest port=8080) to the interface %s\n", ifacename);
+#endif
 
     while (running) { pause(); }
 
@@ -196,8 +210,10 @@ int main(int argc, char *argv[])
     mogu__destroy(skel);
     aloe__detach(askel);
     aloe__destroy(askel);
+#ifdef HAS_XDP
     bpf_xdp_detach(ifindex, xdp_flags, NULL);
     macchiato__destroy(xskel);
+#endif
     printf("Done!\n");
     return 0;
 }
