@@ -1,6 +1,6 @@
 MODULE_NAME = reg_arena_m
 KDIR ?= /lib/modules/$(shell uname -r)/build
-BUILD_DIR ?= $(PWD)/build
+BUILD_DIR ?= $(PWD)
 
 KMOD = $(BUILD_DIR)/$(MODULE_NAME).ko
 KMOD_FILES = reg_arena.c

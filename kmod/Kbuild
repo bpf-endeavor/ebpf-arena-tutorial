@@ -1,3 +1,4 @@
 MODNAME = reg_arena_m
 obj-m += $(MODNAME).o
 $(MODNAME)-y += reg_arena.o
+KBUILD_CFLAGS += -g -O2
